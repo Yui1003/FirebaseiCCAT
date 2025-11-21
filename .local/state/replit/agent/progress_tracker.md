@@ -3,6 +3,16 @@
 [x] 3. Verify the project is working using the feedback tool
 [x] 4. Inform user the import is completed and they can start building, mark the import as completed using the complete_project_import tool
 
+## Navigation Route Fix (Nov 21, 2025 - 11:59 AM):
+
+[x] 446. Diagnosed navigation routing issue - routes ending at snapped projection points instead of destination buildings
+[x] 447. Architect identified root cause: projection snapping within 10m causing routes to end at intermediate buildings (like Gate 2)
+[x] 448. Implemented fix: route endpoints now always use actual building coordinates after Dijkstra pathfinding
+[x] 449. Added conditional replacement of first/last route points to ensure correct start/end locations
+[x] 450. Architect reviewed and approved fix with Pass status
+[x] 451. Fix ensures destination markers appear at intended buildings, not intermediate waypoints
+[x] 452. All tasks completed successfully
+
 ## Environment Recovery (Nov 21, 2025 - 11:50 AM):
 
 [x] 438. Re-installed npm packages after environment restart (already up to date)
