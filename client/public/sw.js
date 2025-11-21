@@ -20,6 +20,50 @@ const apiEndpointsToCache = [
   '/api/rooms'
 ];
 
+// Function to convert lat/lng to tile coordinates
+function latLngToTile(lat, lng, zoom) {
+  const n = Math.pow(2, zoom);
+  const xtile = Math.floor((lng + 180) / 360 * n);
+  const ytile = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * n);
+  return { x: xtile, y: ytile };
+}
+
+// Generate all tile URLs for the campus area
+function generateCampusTileUrls() {
+  const tiles = [];
+  
+  // Campus bounds (slightly expanded to ensure full coverage)
+  const bounds = {
+    north: 14.405,
+    south: 14.400,
+    east: 120.868,
+    west: 120.864
+  };
+  
+  // Generate tiles for zoom levels 17 and 18 (17.5 is displayed, but tiles are integers)
+  const zooms = [17, 18];
+  
+  zooms.forEach(zoom => {
+    // Get tile coordinates for corners
+    const topLeft = latLngToTile(bounds.north, bounds.west, zoom);
+    const bottomRight = latLngToTile(bounds.south, bounds.east, zoom);
+    
+    // Generate all tiles in the bounding box
+    for (let x = topLeft.x; x <= bottomRight.x; x++) {
+      for (let y = topLeft.y; y <= bottomRight.y; y++) {
+        // Use deterministic subdomain selection matching Leaflet's algorithm
+        // This ensures cached URLs exactly match runtime requests
+        const subdomains = ['a', 'b', 'c'];
+        const subdomain = subdomains[(x + y) % subdomains.length];
+        tiles.push(`https://${subdomain}.tile.openstreetmap.org/${zoom}/${x}/${y}.png`);
+      }
+    }
+  });
+  
+  console.log(`[SW] Generated ${tiles.length} map tile URLs for pre-caching`);
+  return tiles;
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -50,7 +94,33 @@ self.addEventListener('install', (event) => {
       ).then(results => {
         const successful = results.filter(r => r.status === 'fulfilled').length;
         const failed = results.filter(r => r.status === 'rejected').length;
-        console.log(`[SW] Pre-caching complete: ${successful} succeeded, ${failed} failed`);
+        console.log(`[SW] API pre-caching complete: ${successful} succeeded, ${failed} failed`);
+      });
+    }).then(() => {
+      // Pre-cache map tiles
+      return caches.open(CACHE_NAME);
+    }).then((cache) => {
+      console.log('[SW] Pre-caching map tiles for offline use');
+      const tileUrls = generateCampusTileUrls();
+      
+      return Promise.allSettled(
+        tileUrls.map(url =>
+          fetch(url)
+            .then(response => {
+              if (response.ok) {
+                return cache.put(url, response);
+              } else {
+                console.warn(`[SW] Failed to cache tile ${url}: HTTP ${response.status}`);
+              }
+            })
+            .catch(err => {
+              console.warn(`[SW] Failed to fetch tile (offline or error):`, err.message);
+            })
+        )
+      ).then(results => {
+        const successful = results.filter(r => r.status === 'fulfilled').length;
+        const failed = results.filter(r => r.status === 'rejected').length;
+        console.log(`[SW] Map tile pre-caching complete: ${successful}/${tileUrls.length} tiles cached`);
       });
     })
   );
@@ -106,12 +176,31 @@ self.addEventListener('fetch', (event) => {
           if (response) {
             return response;
           }
-          return fetch(request).then((response) => {
-            if (response.status === 200) {
-              cache.put(request, response.clone());
-            }
-            return response;
-          });
+          return fetch(request)
+            .then((response) => {
+              if (response.status === 200) {
+                cache.put(request, response.clone());
+              }
+              return response;
+            })
+            .catch((error) => {
+              console.error('[SW] Map tile fetch failed (offline):', error.message);
+              // Return a transparent 256x256 PNG as fallback
+              // This prevents broken tile images while offline
+              return new Response(
+                new Blob([new Uint8Array([
+                  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+                  0, 0, 1, 0, 0, 0, 1, 0, 8, 6, 0, 0, 0, 92, 114, 168, 229,
+                  0, 0, 0, 1, 115, 82, 71, 66, 0, 174, 206, 28, 233, 0, 0, 0,
+                  4, 103, 65, 77, 65, 0, 0, 177, 143, 11, 252, 97, 5, 0, 0, 0,
+                  9, 112, 72, 89, 115, 0, 0, 14, 195, 0, 0, 14, 195, 1, 199, 111,
+                  168, 100, 0, 0, 0, 23, 73, 68, 65, 84, 120, 94, 237, 193, 1,
+                  13, 0, 0, 0, 194, 160, 247, 79, 109, 14, 55, 160, 0, 0, 0, 0,
+                  0, 0, 230, 7, 32, 0, 0, 1, 225, 33, 177, 39, 0, 0, 0, 0, 73,
+                  69, 78, 68, 174, 66, 96, 130
+                ])], { type: 'image/png' })
+              );
+            });
         });
       })
     );

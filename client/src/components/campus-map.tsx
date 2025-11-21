@@ -134,6 +134,7 @@ export default function CampusMap({
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors',
       maxZoom: 19,
+      subdomains: ['a', 'b', 'c'],
     }).addTo(map);
 
     mapInstanceRef.current = map;
