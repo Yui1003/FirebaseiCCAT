@@ -1,6 +1,4 @@
 import admin from 'firebase-admin';
-import { readFileSync, existsSync } from 'fs';
-import { join } from 'path';
 
 let firebaseApp: admin.app.App;
 let firestoreDb: admin.firestore.Firestore;
@@ -16,19 +14,23 @@ export function initializeFirebase() {
   }
 
   try {
-    const serviceAccountPath = join(process.cwd(), 'serviceAccountKey.json');
-    
-    if (!existsSync(serviceAccountPath)) {
-      console.warn('⚠️ serviceAccountKey.json not found - Firebase will not be available');
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+
+    if (!projectId || !privateKey || !clientEmail) {
+      console.warn('⚠️ Firebase credentials not found in environment variables');
       console.warn('⚠️ Falling back to data.json for read operations');
       initializationFailed = true;
-      throw new Error('serviceAccountKey.json not found');
+      throw new Error('Firebase credentials not configured');
     }
 
-    const serviceAccount = JSON.parse(readFileSync(serviceAccountPath, 'utf8'));
-
     firebaseApp = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+      credential: admin.credential.cert({
+        projectId,
+        privateKey: privateKey.replace(/\\n/g, '\n'),
+        clientEmail,
+      })
     });
 
     firestoreDb = firebaseApp.firestore();

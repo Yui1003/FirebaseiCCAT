@@ -2,9 +2,18 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { initializeFirebase } from "./firebase";
+import { config } from "dotenv";
+import { join } from "path";
 
-// Initialize Firebase on startup
-initializeFirebase();
+// Load environment variables from .env.local
+config({ path: join(process.cwd(), '.env.local') });
+
+// Initialize Firebase on startup (with fallback)
+try {
+  initializeFirebase();
+} catch (error) {
+  console.warn('⚠️ Firebase initialization failed - using fallback mode with data.json');
+}
 
 const app = express();
 
