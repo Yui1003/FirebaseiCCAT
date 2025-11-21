@@ -1,5 +1,5 @@
-const CACHE_NAME = 'iccat-v3';
-const DATA_CACHE_NAME = 'iccat-data-v3';
+const CACHE_NAME = 'iccat-v4';
+const DATA_CACHE_NAME = 'iccat-data-v4';
 
 const urlsToCache = [
   '/',
@@ -32,29 +32,36 @@ function latLngToTile(lat, lng, zoom) {
 function generateCampusTileUrls() {
   const tiles = [];
   
-  // Campus bounds (slightly expanded to ensure full coverage)
+  // Campus bounds - expanded significantly to ensure full coverage at all zoom levels
   const bounds = {
-    north: 14.405,
-    south: 14.400,
-    east: 120.868,
-    west: 120.864
+    north: 14.407,   // Expanded north
+    south: 14.398,   // Expanded south
+    east: 120.870,   // Expanded east
+    west: 120.862    // Expanded west
   };
   
-  // Generate tiles for zoom levels 17 and 18 (17.5 is displayed, but tiles are integers)
-  const zooms = [17, 18];
+  // Generate tiles for zoom levels 16, 17, 18, and 19
+  // This ensures smooth zooming and panning while offline
+  const zooms = [16, 17, 18, 19];
+  
+  console.log('[SW] Generating tile URLs for campus area...');
+  console.log(`[SW] Bounds: N=${bounds.north}, S=${bounds.south}, E=${bounds.east}, W=${bounds.west}`);
   
   zooms.forEach(zoom => {
     // Get tile coordinates for corners
     const topLeft = latLngToTile(bounds.north, bounds.west, zoom);
     const bottomRight = latLngToTile(bounds.south, bounds.east, zoom);
     
+    console.log(`[SW] Zoom ${zoom}: tiles from (${topLeft.x},${topLeft.y}) to (${bottomRight.x},${bottomRight.y})`);
+    
     // Generate all tiles in the bounding box
     for (let x = topLeft.x; x <= bottomRight.x; x++) {
       for (let y = topLeft.y; y <= bottomRight.y; y++) {
-        // Use deterministic subdomain selection matching Leaflet's algorithm
-        // This ensures cached URLs exactly match runtime requests
+        // Match Leaflet's subdomain selection exactly
+        // Leaflet uses Math.abs for consistent subdomain mapping
         const subdomains = ['a', 'b', 'c'];
-        const subdomain = subdomains[(x + y) % subdomains.length];
+        const index = Math.abs(x + y) % subdomains.length;
+        const subdomain = subdomains[index];
         tiles.push(`https://${subdomain}.tile.openstreetmap.org/${zoom}/${x}/${y}.png`);
       }
     }
@@ -100,27 +107,47 @@ self.addEventListener('install', (event) => {
       // Pre-cache map tiles
       return caches.open(CACHE_NAME);
     }).then((cache) => {
-      console.log('[SW] Pre-caching map tiles for offline use');
+      console.log('[SW] Starting map tile pre-caching for offline use...');
       const tileUrls = generateCampusTileUrls();
+      console.log(`[SW] Will attempt to cache ${tileUrls.length} tiles`);
+      
+      let successCount = 0;
+      let failCount = 0;
       
       return Promise.allSettled(
-        tileUrls.map(url =>
+        tileUrls.map((url, index) =>
           fetch(url)
             .then(response => {
               if (response.ok) {
+                successCount++;
+                if (index < 5 || index % 20 === 0) {
+                  console.log(`[SW] ✓ Cached tile ${index + 1}/${tileUrls.length}: ${url}`);
+                }
                 return cache.put(url, response);
               } else {
-                console.warn(`[SW] Failed to cache tile ${url}: HTTP ${response.status}`);
+                failCount++;
+                console.error(`[SW] ✗ Failed to cache tile ${url}: HTTP ${response.status}`);
+                return Promise.reject(new Error(`HTTP ${response.status}`));
               }
             })
             .catch(err => {
-              console.warn(`[SW] Failed to fetch tile (offline or error):`, err.message);
+              failCount++;
+              console.error(`[SW] ✗ Failed to fetch tile ${url}:`, err.message);
+              return Promise.reject(err);
             })
         )
       ).then(results => {
         const successful = results.filter(r => r.status === 'fulfilled').length;
         const failed = results.filter(r => r.status === 'rejected').length;
-        console.log(`[SW] Map tile pre-caching complete: ${successful}/${tileUrls.length} tiles cached`);
+        console.log(`[SW] ========================================`);
+        console.log(`[SW] Map tile pre-caching complete!`);
+        console.log(`[SW] Success: ${successful}/${tileUrls.length} tiles`);
+        console.log(`[SW] Failed: ${failed}/${tileUrls.length} tiles`);
+        console.log(`[SW] ========================================`);
+        
+        if (failed > 0) {
+          console.warn(`[SW] ${failed} tiles failed to cache. The app may not work fully offline.`);
+        }
       });
     })
   );
@@ -233,15 +260,23 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('activate', (event) => {
   const cacheWhitelist = [CACHE_NAME, DATA_CACHE_NAME];
   
+  console.log('[SW] Activating new Service Worker...');
+  console.log(`[SW] Current caches: ${cacheWhitelist.join(', ')}`);
+  
   event.waitUntil(
     caches.keys().then((cacheNames) => {
+      console.log(`[SW] Found existing caches: ${cacheNames.join(', ')}`);
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheWhitelist.indexOf(cacheName) === -1) {
+            console.log(`[SW] Deleting old cache: ${cacheName}`);
             return caches.delete(cacheName);
           }
         })
       );
+    }).then(() => {
+      console.log('[SW] Service Worker activated successfully!');
+      return self.clients.claim();
     })
   );
 });
