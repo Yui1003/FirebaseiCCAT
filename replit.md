@@ -1,7 +1,7 @@
 # iCCAT Smart Campus Information Kiosk
 
 ## Overview
-iCCAT (Interactive Campus Companion and Assistance Terminal) is a full-stack web application designed as an offline-ready smart kiosk system for Cavite State University's CCAT Campus. Its primary purpose is to provide interactive campus navigation, wayfinding, staff directory, and event information through a touch-optimized interface for public kiosk deployment. The system includes public-facing modules and a comprehensive admin panel for content management, built with offline capability using service workers for caching.
+iCCAT (Interactive Campus Companion and Assistance Terminal) is a full-stack web application designed as an **offline-first** smart kiosk system for Cavite State University's CCAT Campus. Its primary purpose is to provide interactive campus navigation, wayfinding, staff directory, and event information through a touch-optimized interface for public kiosk deployment. The system includes public-facing modules and a comprehensive admin panel for content management, built with complete offline capability including client-side pathfinding and embedded baseline datasets.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
@@ -28,10 +28,22 @@ Preferred communication style: Simple, everyday language.
 - **Admin Access:** Simple username/password via `/api/admin/login`, localStorage flag for session persistence, client-side protected routes.
 
 ### Navigation & Pathfinding
-- **Algorithm:** Dijkstra's shortest path algorithm.
+- **Algorithm:** Dijkstra's shortest path algorithm (client-side implementation).
+- **Offline Capability:** Complete pathfinding operates in browser without server dependency.
 - **Graph Construction:** Paths converted to graph of nodes and weighted edges. Node snapping merges nodes from *different* paths within 10 meters, while preserving same-path structure. Edge weights use Haversine distance. Building start/end points project onto nearest path segment.
 - **Path Calculation:** Finds shortest route between buildings, returning waypoints along actual paths.
 - **Walkpath Network Design:** Supports unlimited branching paths with `pathId`-based merge control, ensuring correct junction creation and preservation of individual path structures.
+
+### Offline-First Architecture
+- **Embedded Baseline Data:** All critical datasets (buildings, staff, floors, rooms, events, walkpaths, drivepaths) bundled in JavaScript build at `client/src/lib/baseline-data.json`.
+- **Triple-Tier Fallback Strategy:** 
+  1. **Tier 1:** Try fetch from API (served from Service Worker cache if available)
+  2. **Tier 2:** Read directly from CacheStorage if fetch fails
+  3. **Tier 3:** Use embedded baseline data (guaranteed to work)
+- **Global React Query Integration:** All queries automatically use offline-first strategy via custom `offlineFirstQueryFn` in queryClient.
+- **First-Boot Offline Support:** Kiosk works perfectly on first boot with zero network connectivity - all features render from embedded data.
+- **Service Worker Caching:** Cache-first strategy for API requests, resilient install process tolerates offline conditions, pre-caches critical endpoints when online.
+- **Browser Compatibility:** Uses `window.caches` API for proper browser main-thread compatibility.
 
 ## External Dependencies
 
