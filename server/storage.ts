@@ -1,5 +1,6 @@
-import { randomUUID } from "crypto";
 import { db } from "./db";
+import { eq } from "drizzle-orm";
+import * as schema from "@shared/schema";
 import type {
   Building, InsertBuilding,
   Floor, InsertFloor,
@@ -13,14 +14,12 @@ import type {
 } from "@shared/schema";
 
 export interface IStorage {
-  // Buildings
   getBuildings(): Promise<Building[]>;
   getBuilding(id: string): Promise<Building | undefined>;
   createBuilding(building: InsertBuilding): Promise<Building>;
   updateBuilding(id: string, building: InsertBuilding): Promise<Building | undefined>;
   deleteBuilding(id: string): Promise<boolean>;
 
-  // Floors
   getFloors(): Promise<Floor[]>;
   getFloor(id: string): Promise<Floor | undefined>;
   getFloorsByBuilding(buildingId: string): Promise<Floor[]>;
@@ -28,7 +27,6 @@ export interface IStorage {
   updateFloor(id: string, floor: InsertFloor): Promise<Floor | undefined>;
   deleteFloor(id: string): Promise<boolean>;
 
-  // Rooms
   getRooms(): Promise<Room[]>;
   getRoom(id: string): Promise<Room | undefined>;
   getRoomsByFloor(floorId: string): Promise<Room[]>;
@@ -37,7 +35,6 @@ export interface IStorage {
   updateRoom(id: string, room: InsertRoom): Promise<Room | undefined>;
   deleteRoom(id: string): Promise<boolean>;
 
-  // Staff
   getStaff(): Promise<Staff[]>;
   getStaffMember(id: string): Promise<Staff | undefined>;
   getStaffByBuilding(buildingId: string): Promise<Staff[]>;
@@ -45,305 +42,242 @@ export interface IStorage {
   updateStaff(id: string, staff: InsertStaff): Promise<Staff | undefined>;
   deleteStaff(id: string): Promise<boolean>;
 
-  // Events
   getEvents(): Promise<Event[]>;
   getEvent(id: string): Promise<Event | undefined>;
   createEvent(event: InsertEvent): Promise<Event>;
   updateEvent(id: string, event: InsertEvent): Promise<Event | undefined>;
   deleteEvent(id: string): Promise<boolean>;
 
-  // Walkpaths
   getWalkpaths(): Promise<Walkpath[]>;
   getWalkpath(id: string): Promise<Walkpath | undefined>;
   createWalkpath(walkpath: InsertWalkpath): Promise<Walkpath>;
   updateWalkpath(id: string, walkpath: InsertWalkpath): Promise<Walkpath | undefined>;
   deleteWalkpath(id: string): Promise<boolean>;
 
-  // Drivepaths
   getDrivepaths(): Promise<Drivepath[]>;
   getDrivepath(id: string): Promise<Drivepath | undefined>;
   createDrivepath(drivepath: InsertDrivepath): Promise<Drivepath>;
   updateDrivepath(id: string, drivepath: InsertDrivepath): Promise<Drivepath | undefined>;
   deleteDrivepath(id: string): Promise<boolean>;
 
-  // Admin
   getAdminByUsername(username: string): Promise<AdminUser | undefined>;
   createAdmin(admin: InsertAdminUser): Promise<AdminUser>;
 
-  // Settings
   getSettings(): Promise<Setting[]>;
   getSetting(key: string): Promise<Setting | undefined>;
   createSetting(setting: InsertSetting): Promise<Setting>;
   updateSetting(key: string, value: string): Promise<Setting | undefined>;
 
-  // Backup/Export
   exportToJSON(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
-  // Buildings
   async getBuildings(): Promise<Building[]> {
-    const snapshot = await db.collection('buildings').get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Building));
+    return await db.select().from(schema.buildings);
   }
 
   async getBuilding(id: string): Promise<Building | undefined> {
-    const doc = await db.collection('buildings').doc(id).get();
-    if (!doc.exists) return undefined;
-    return { id: doc.id, ...doc.data() } as Building;
+    const result = await db.select().from(schema.buildings).where(eq(schema.buildings.id, id));
+    return result[0];
   }
 
   async createBuilding(insertBuilding: InsertBuilding): Promise<Building> {
-    const id = randomUUID();
-    const building = { ...insertBuilding, id, markerIcon: insertBuilding.markerIcon || "building" } as Building;
-    await db.collection('buildings').doc(id).set(building);
-    return building;
+    const result = await db.insert(schema.buildings).values(insertBuilding).returning();
+    return result[0];
   }
 
   async updateBuilding(id: string, insertBuilding: InsertBuilding): Promise<Building | undefined> {
-    const building = { ...insertBuilding, id, markerIcon: insertBuilding.markerIcon || "building" } as Building;
-    await db.collection('buildings').doc(id).set(building);
-    return building;
+    const result = await db.update(schema.buildings).set(insertBuilding).where(eq(schema.buildings.id, id)).returning();
+    return result[0];
   }
 
   async deleteBuilding(id: string): Promise<boolean> {
-    await db.collection('buildings').doc(id).delete();
+    await db.delete(schema.buildings).where(eq(schema.buildings.id, id));
     return true;
   }
 
-  // Floors
   async getFloors(): Promise<Floor[]> {
-    const snapshot = await db.collection('floors').get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Floor));
+    return await db.select().from(schema.floors);
   }
 
   async getFloor(id: string): Promise<Floor | undefined> {
-    const doc = await db.collection('floors').doc(id).get();
-    if (!doc.exists) return undefined;
-    return { id: doc.id, ...doc.data() } as Floor;
+    const result = await db.select().from(schema.floors).where(eq(schema.floors.id, id));
+    return result[0];
   }
 
   async getFloorsByBuilding(buildingId: string): Promise<Floor[]> {
-    const snapshot = await db.collection('floors').where('buildingId', '==', buildingId).get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Floor));
+    return await db.select().from(schema.floors).where(eq(schema.floors.buildingId, buildingId));
   }
 
   async createFloor(insertFloor: InsertFloor): Promise<Floor> {
-    const id = randomUUID();
-    const floor = { ...insertFloor, id } as Floor;
-    await db.collection('floors').doc(id).set(floor);
-    return floor;
+    const result = await db.insert(schema.floors).values(insertFloor).returning();
+    return result[0];
   }
 
   async updateFloor(id: string, insertFloor: InsertFloor): Promise<Floor | undefined> {
-    const floor = { ...insertFloor, id } as Floor;
-    await db.collection('floors').doc(id).set(floor);
-    return floor;
+    const result = await db.update(schema.floors).set(insertFloor).where(eq(schema.floors.id, id)).returning();
+    return result[0];
   }
 
   async deleteFloor(id: string): Promise<boolean> {
-    await db.collection('floors').doc(id).delete();
+    await db.delete(schema.floors).where(eq(schema.floors.id, id));
     return true;
   }
 
-  // Rooms
   async getRooms(): Promise<Room[]> {
-    const snapshot = await db.collection('rooms').get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+    return await db.select().from(schema.rooms);
   }
 
   async getRoom(id: string): Promise<Room | undefined> {
-    const doc = await db.collection('rooms').doc(id).get();
-    if (!doc.exists) return undefined;
-    return { id: doc.id, ...doc.data() } as Room;
+    const result = await db.select().from(schema.rooms).where(eq(schema.rooms.id, id));
+    return result[0];
   }
 
   async getRoomsByFloor(floorId: string): Promise<Room[]> {
-    const snapshot = await db.collection('rooms').where('floorId', '==', floorId).get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+    return await db.select().from(schema.rooms).where(eq(schema.rooms.floorId, floorId));
   }
 
   async getRoomsByBuilding(buildingId: string): Promise<Room[]> {
-    const snapshot = await db.collection('rooms').where('buildingId', '==', buildingId).get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+    return await db.select().from(schema.rooms).where(eq(schema.rooms.buildingId, buildingId));
   }
 
   async createRoom(insertRoom: InsertRoom): Promise<Room> {
-    const id = randomUUID();
-    const room = { ...insertRoom, id } as Room;
-    await db.collection('rooms').doc(id).set(room);
-    return room;
+    const result = await db.insert(schema.rooms).values(insertRoom).returning();
+    return result[0];
   }
 
   async updateRoom(id: string, insertRoom: InsertRoom): Promise<Room | undefined> {
-    const room = { ...insertRoom, id } as Room;
-    await db.collection('rooms').doc(id).set(room);
-    return room;
+    const result = await db.update(schema.rooms).set(insertRoom).where(eq(schema.rooms.id, id)).returning();
+    return result[0];
   }
 
   async deleteRoom(id: string): Promise<boolean> {
-    await db.collection('rooms').doc(id).delete();
+    await db.delete(schema.rooms).where(eq(schema.rooms.id, id));
     return true;
   }
 
-  // Staff
   async getStaff(): Promise<Staff[]> {
-    const snapshot = await db.collection('staff').get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Staff));
+    return await db.select().from(schema.staff);
   }
 
   async getStaffMember(id: string): Promise<Staff | undefined> {
-    const doc = await db.collection('staff').doc(id).get();
-    if (!doc.exists) return undefined;
-    return { id: doc.id, ...doc.data() } as Staff;
+    const result = await db.select().from(schema.staff).where(eq(schema.staff.id, id));
+    return result[0];
   }
 
   async getStaffByBuilding(buildingId: string): Promise<Staff[]> {
-    const snapshot = await db.collection('staff').where('buildingId', '==', buildingId).get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Staff));
+    return await db.select().from(schema.staff).where(eq(schema.staff.buildingId, buildingId));
   }
 
   async createStaff(insertStaff: InsertStaff): Promise<Staff> {
-    const id = randomUUID();
-    const staffMember = { ...insertStaff, id } as Staff;
-    await db.collection('staff').doc(id).set(staffMember);
-    return staffMember;
+    const result = await db.insert(schema.staff).values(insertStaff).returning();
+    return result[0];
   }
 
   async updateStaff(id: string, insertStaff: InsertStaff): Promise<Staff | undefined> {
-    const staffMember = { ...insertStaff, id } as Staff;
-    await db.collection('staff').doc(id).set(staffMember);
-    return staffMember;
+    const result = await db.update(schema.staff).set(insertStaff).where(eq(schema.staff.id, id)).returning();
+    return result[0];
   }
 
   async deleteStaff(id: string): Promise<boolean> {
-    await db.collection('staff').doc(id).delete();
+    await db.delete(schema.staff).where(eq(schema.staff.id, id));
     return true;
   }
 
-  // Events
   async getEvents(): Promise<Event[]> {
-    const snapshot = await db.collection('events').get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Event));
+    return await db.select().from(schema.events);
   }
 
   async getEvent(id: string): Promise<Event | undefined> {
-    const doc = await db.collection('events').doc(id).get();
-    if (!doc.exists) return undefined;
-    return { id: doc.id, ...doc.data() } as Event;
+    const result = await db.select().from(schema.events).where(eq(schema.events.id, id));
+    return result[0];
   }
 
   async createEvent(insertEvent: InsertEvent): Promise<Event> {
-    const id = randomUUID();
-    const event = { ...insertEvent, id, classification: insertEvent.classification || "Event" } as Event;
-    await db.collection('events').doc(id).set(event);
-    return event;
+    const result = await db.insert(schema.events).values(insertEvent).returning();
+    return result[0];
   }
 
   async updateEvent(id: string, insertEvent: InsertEvent): Promise<Event | undefined> {
-    const event = { ...insertEvent, id, classification: insertEvent.classification || "Event" } as Event;
-    await db.collection('events').doc(id).set(event);
-    return event;
+    const result = await db.update(schema.events).set(insertEvent).where(eq(schema.events.id, id)).returning();
+    return result[0];
   }
 
   async deleteEvent(id: string): Promise<boolean> {
-    await db.collection('events').doc(id).delete();
+    await db.delete(schema.events).where(eq(schema.events.id, id));
     return true;
   }
 
-  // Walkpaths
   async getWalkpaths(): Promise<Walkpath[]> {
-    const snapshot = await db.collection('walkpaths').get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Walkpath));
+    return await db.select().from(schema.walkpaths);
   }
 
   async getWalkpath(id: string): Promise<Walkpath | undefined> {
-    const doc = await db.collection('walkpaths').doc(id).get();
-    if (!doc.exists) return undefined;
-    return { id: doc.id, ...doc.data() } as Walkpath;
+    const result = await db.select().from(schema.walkpaths).where(eq(schema.walkpaths.id, id));
+    return result[0];
   }
 
   async createWalkpath(insertWalkpath: InsertWalkpath): Promise<Walkpath> {
-    const id = randomUUID();
-    const walkpath = { ...insertWalkpath, id } as Walkpath;
-    await db.collection('walkpaths').doc(id).set(walkpath);
-    return walkpath;
+    const result = await db.insert(schema.walkpaths).values(insertWalkpath).returning();
+    return result[0];
   }
 
   async updateWalkpath(id: string, insertWalkpath: InsertWalkpath): Promise<Walkpath | undefined> {
-    const walkpath = { ...insertWalkpath, id } as Walkpath;
-    await db.collection('walkpaths').doc(id).set(walkpath);
-    return walkpath;
+    const result = await db.update(schema.walkpaths).set(insertWalkpath).where(eq(schema.walkpaths.id, id)).returning();
+    return result[0];
   }
 
   async deleteWalkpath(id: string): Promise<boolean> {
-    await db.collection('walkpaths').doc(id).delete();
+    await db.delete(schema.walkpaths).where(eq(schema.walkpaths.id, id));
     return true;
   }
 
-  // Drivepaths
   async getDrivepaths(): Promise<Drivepath[]> {
-    const snapshot = await db.collection('drivepaths').get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Drivepath));
+    return await db.select().from(schema.drivepaths);
   }
 
   async getDrivepath(id: string): Promise<Drivepath | undefined> {
-    const doc = await db.collection('drivepaths').doc(id).get();
-    if (!doc.exists) return undefined;
-    return { id: doc.id, ...doc.data() } as Drivepath;
+    const result = await db.select().from(schema.drivepaths).where(eq(schema.drivepaths.id, id));
+    return result[0];
   }
 
   async createDrivepath(insertDrivepath: InsertDrivepath): Promise<Drivepath> {
-    const id = randomUUID();
-    const drivepath = { ...insertDrivepath, id } as Drivepath;
-    await db.collection('drivepaths').doc(id).set(drivepath);
-    return drivepath;
+    const result = await db.insert(schema.drivepaths).values(insertDrivepath).returning();
+    return result[0];
   }
 
   async updateDrivepath(id: string, insertDrivepath: InsertDrivepath): Promise<Drivepath | undefined> {
-    const drivepath = { ...insertDrivepath, id } as Drivepath;
-    await db.collection('drivepaths').doc(id).set(drivepath);
-    return drivepath;
+    const result = await db.update(schema.drivepaths).set(insertDrivepath).where(eq(schema.drivepaths.id, id)).returning();
+    return result[0];
   }
 
   async deleteDrivepath(id: string): Promise<boolean> {
-    await db.collection('drivepaths').doc(id).delete();
+    await db.delete(schema.drivepaths).where(eq(schema.drivepaths.id, id));
     return true;
   }
 
-  // Admin
   async getAdminByUsername(username: string): Promise<AdminUser | undefined> {
-    const snapshot = await db.collection('admins').where('username', '==', username).get();
-    if (snapshot.empty) return undefined;
-    const doc = snapshot.docs[0];
-    return { id: doc.id, ...doc.data() } as AdminUser;
+    const result = await db.select().from(schema.admins).where(eq(schema.admins.username, username));
+    return result[0];
   }
 
   async createAdmin(insertAdmin: InsertAdminUser): Promise<AdminUser> {
-    const id = randomUUID();
-    const admin: AdminUser = { ...insertAdmin, id };
-    await db.collection('admins').doc(id).set(admin);
-    return admin;
+    const result = await db.insert(schema.admins).values(insertAdmin).returning();
+    return result[0];
   }
 
-  // Settings
   async getSettings(): Promise<Setting[]> {
-    const snapshot = await db.collection('settings').get();
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Setting));
+    return await db.select().from(schema.settings);
   }
 
   async getSetting(key: string): Promise<Setting | undefined> {
-    const snapshot = await db.collection('settings').where('key', '==', key).get();
-    if (snapshot.empty) return undefined;
-    const doc = snapshot.docs[0];
-    return { id: doc.id, ...doc.data() } as Setting;
+    const result = await db.select().from(schema.settings).where(eq(schema.settings.key, key));
+    return result[0];
   }
 
   async createSetting(insertSetting: InsertSetting): Promise<Setting> {
-    const id = randomUUID();
-    const setting: Setting = { ...insertSetting, id };
-    await db.collection('settings').doc(id).set(setting);
-    return setting;
+    const result = await db.insert(schema.settings).values(insertSetting).returning();
+    return result[0];
   }
 
   async updateSetting(key: string, value: string): Promise<Setting | undefined> {
@@ -351,19 +285,12 @@ export class DatabaseStorage implements IStorage {
     if (!existing) {
       return undefined;
     }
-    const updated: Setting = { 
-      id: existing.id,
-      key: existing.key,
-      value,
-      description: existing.description || null
-    };
-    await db.collection('settings').doc(existing.id).set(updated);
-    return updated;
+    const result = await db.update(schema.settings).set({ value }).where(eq(schema.settings.key, key)).returning();
+    return result[0];
   }
 
   async exportToJSON(): Promise<void> {
-    // Export functionality no longer needed - Firestore is the source of truth
-    console.log('Export to JSON skipped - Firestore is the source of truth');
+    console.log('Export to JSON skipped - PostgreSQL is the source of truth');
   }
 }
 
