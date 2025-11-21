@@ -65,4 +65,5 @@ Preferred communication style: Simple, everyday language.
 - `react-hook-form` for state management, `@hookform/resolvers` with Zod for validation, `drizzle-zod`.
 
 ### Service Worker
-- **Offline Caching:** Static assets cached on install, network-first strategy with cache fallback for API calls, separate cache namespaces for static and data, opportunistic map tile caching.
+- **Offline Caching:** Static assets cached on install, cache-first strategy for API requests, separate cache namespaces for static and data.
+- **Map Tile Pre-Caching:** Deterministic subdomain selection algorithm `(x + y) % subdomains.length` matches Leaflet's runtime URL generation. Pre-caches all campus area tiles (zoom levels 17-18, ~16-20 tiles covering lat: 14.400-14.405, lng: 120.864-120.868) during Service Worker installation for complete offline map functionality. Uses explicit subdomain array `['a', 'b', 'c']` matching Leaflet configuration to ensure perfect cache hits.
