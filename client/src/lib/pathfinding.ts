@@ -440,5 +440,26 @@ export function findShortestPath(
     return node ? { lat: node.lat, lng: node.lng } : null;
   }).filter((p): p is LatLng => p !== null);
 
+  // Ensure route starts with actual start building coordinates
+  if (route.length > 0 && route[0]) {
+    const firstPoint = route[0];
+    // Only replace if the first point is not already the start building
+    if (Math.abs(firstPoint.lat - startPoint.lat) > 0.00001 || Math.abs(firstPoint.lng - startPoint.lng) > 0.00001) {
+      route[0] = startPoint;
+    }
+  }
+
+  // Ensure route ends with actual destination building coordinates
+  if (route.length > 0 && route[route.length - 1]) {
+    const lastPoint = route[route.length - 1];
+    // Only replace if the last point is not already the end building
+    if (Math.abs(lastPoint.lat - endPoint.lat) > 0.00001 || Math.abs(lastPoint.lng - endPoint.lng) > 0.00001) {
+      route[route.length - 1] = endPoint;
+    }
+  }
+
+  console.log(`[CLIENT] Route has ${route.length} waypoints from "${start.name}" to "${end.name}"`);
+  console.log(`[CLIENT] Final route: Start (${route[0]?.lat.toFixed(6)}, ${route[0]?.lng.toFixed(6)}) → End (${route[route.length - 1]?.lat.toFixed(6)}, ${route[route.length - 1]?.lng.toFixed(6)})`);
+
   return route;
 }
