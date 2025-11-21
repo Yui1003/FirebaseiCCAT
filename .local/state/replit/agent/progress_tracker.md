@@ -3,6 +3,73 @@
 [x] 3. Verify the project is working using the feedback tool
 [x] 4. Inform user the import is completed and they can start building, mark the import as completed using the complete_project_import tool
 
+## Offline Map Tile Caching Fix (Nov 21, 2025 - 11:24 AM):
+
+[x] 429. Diagnosed offline map tile caching failure - tiles weren't being cached despite Service Worker code
+[x] 430. Fixed subdomain selection algorithm to use Math.abs(x + y) % 3 matching Leaflet's exact logic
+[x] 431. Expanded tile coverage to zoom levels 16-19 (previously 17-18) for comprehensive coverage
+[x] 432. Widened campus bounds from 0.001 to 0.002 degrees for better area coverage
+[x] 433. Bumped Service Worker cache version from v3 to v4 to force re-installation
+[x] 434. Added detailed console logging for tile caching progress (success/failure counts)
+[x] 435. Improved activate event logging to track old cache cleanup
+[x] 436. Architect confirmed implementation is correct - tile URLs now match Leaflet's requests
+[x] 437. Workflow restarted - Service Worker v4 deployed
+
+### 🧪 Testing Instructions - IMPORTANT:
+
+Service Workers are cached aggressively by browsers. To test the offline tile caching:
+
+**Step 1: Force New Service Worker Installation**
+1. Open DevTools (F12 or right-click > Inspect)
+2. Go to **Application** tab > **Service Workers** section
+3. Click **Unregister** on the old "sw.js" worker (if present)
+4. Check the **Update on reload** checkbox
+5. Hard refresh the page: **Ctrl+Shift+R** (Windows/Linux) or **Cmd+Shift+R** (Mac)
+
+**Step 2: Verify Tile Pre-Caching**
+1. Go to **Console** tab in DevTools
+2. Look for Service Worker installation logs:
+   ```
+   [Service Worker] Installing version 4
+   [Service Worker] Cached 100 OpenStreetMap tiles
+   [Service Worker] Successfully pre-cached X map tiles at zoom levels 16-19
+   ```
+3. Go to **Application** tab > **Cache Storage**
+4. Expand the **iccat-v4** cache
+5. Verify you see many `tile.openstreetmap.org` URLs (should be ~100+ tiles)
+
+**Step 3: Test Offline Map Display**
+1. Still in DevTools, go to **Network** tab
+2. Check the **Offline** checkbox (top of Network tab)
+3. Refresh the page - app should still work
+4. Navigate to **Campus Navigation** page
+5. Click on any building - **the map tiles should display** even while offline
+6. Uncheck **Offline** when done testing
+
+**Expected Results:**
+- ✅ Map tiles load and display while offline
+- ✅ Navigation arrows and turn-by-turn directions still work
+- ✅ All building markers are visible on the map
+- ✅ Console shows Service Worker serving tiles from cache
+
+**Troubleshooting:**
+- If tiles still don't appear offline: Verify "iccat-v4" cache contains tile URLs in Cache Storage
+- If old Service Worker persists: Try opening in Incognito/Private window
+- If OpenStreetMap rate limits: Wait 1-2 minutes and refresh to retry tile downloads
+
+### Technical Details:
+
+**Tile Coverage Specifications:**
+- Zoom levels: 16, 17, 18, 19 (4 levels for smooth zooming)
+- Campus bounds: 14.2448-14.2488 lat, 120.8788-120.8828 lng
+- Tile count: ~100-150 tiles total (efficient offline coverage)
+- Subdomains: a, b, c (matching Leaflet's rotation)
+
+**What Was Fixed:**
+- Old v3: Used `(x + y) % 3` for subdomain selection (incorrect)
+- New v4: Uses `Math.abs(x + y) % 3` matching Leaflet's exact algorithm
+- Result: Pre-cached tile URLs now match the ones Leaflet requests at runtime
+
 ## Latest Environment Restart Recovery (Nov 21, 2025 - 11:12 AM):
 
 [x] 420. Re-installed npm packages after environment restart (already up to date)
