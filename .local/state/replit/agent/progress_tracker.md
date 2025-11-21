@@ -14,6 +14,39 @@
 [x] 400. All migration tasks confirmed as complete
 [x] 401. Project import marked as complete
 
+## Offline Functionality Implementation (Nov 21, 2025 - 10:10 AM):
+
+[x] 402. Ported Dijkstra's pathfinding algorithm to client-side (client/src/lib/pathfinding.ts)
+[x] 403. Created offline data caching utilities with CacheStorage fallback
+[x] 404. Updated navigation page to use client-side route calculation (no server needed)
+[x] 405. Enhanced Service Worker to pre-cache all vital API endpoints
+[x] 406. Changed Service Worker to cache-first strategy for offline operation
+[x] 407. Added offline detection hook and visual indicator
+[x] 408. Fixed KIOSK_LOCATION type safety issues in shared/schema.ts
+[x] 409. Made offline-data helpers resilient with direct CacheStorage access
+[x] 410. Hardened Service Worker install to tolerate offline conditions
+[x] 411. Architect reviewed implementation with detailed feedback
+
+## Offline Capability Status:
+✅ **Works Offline After First Visit:**
+- Navigation with route calculation (walking/driving)
+- Events and announcements viewing
+- Staff directory searching
+- Building information browsing
+- Map tiles display (cached from OpenStreetMap)
+
+✅ **Improvements Made:**
+- Client-side pathfinding (no server needed)
+- Cache-first data loading
+- Offline indicator shows connectivity status
+- Service Worker survives offline installation
+- CacheStorage fallback when fetch fails
+
+⚠️ **Known Limitation:**
+- First visit while completely offline won't work (no cached data yet)
+- Requires one online visit to cache data
+- Typical kiosk deployment sets up while online, so this is rare edge case
+
 ## Firebase Migration & Environment Recovery (Nov 21, 2025 - 9:12 AM):
 
 [x] 382. Reverted PostgreSQL migration (user needs Firestore for Firebase deployment)

@@ -14,6 +14,8 @@ import GetDirectionsDialog from "@/components/get-directions-dialog";
 import type { Building, NavigationRoute, Staff, Floor, Room } from "@shared/schema";
 import { poiTypes, KIOSK_LOCATION } from "@shared/schema";
 import { useGlobalInactivity } from "@/hooks/use-inactivity";
+import { findShortestPath } from "@/lib/pathfinding";
+import { getWalkpaths, getDrivepaths, getBuildings, getStaff, getFloors, getRooms } from "@/lib/offline-data";
 
 export default function Navigation() {
   // Return to home after 3 minutes of inactivity
@@ -30,19 +32,23 @@ export default function Navigation() {
   const [directionsDestination, setDirectionsDestination] = useState<Building | null>(null);
 
   const { data: buildings = [] } = useQuery<Building[]>({
-    queryKey: ['/api/buildings']
+    queryKey: ['/api/buildings'],
+    queryFn: getBuildings
   });
 
   const { data: staff = [] } = useQuery<Staff[]>({
-    queryKey: ['/api/staff']
+    queryKey: ['/api/staff'],
+    queryFn: getStaff
   });
 
   const { data: floors = [] } = useQuery<Floor[]>({
-    queryKey: ['/api/floors']
+    queryKey: ['/api/floors'],
+    queryFn: getFloors
   });
 
   const { data: rooms = [] } = useQuery<Room[]>({
-    queryKey: ['/api/rooms']
+    queryKey: ['/api/rooms'],
+    queryFn: getRooms
   });
 
   useEffect(() => {
@@ -70,25 +76,16 @@ export default function Navigation() {
         
         setTimeout(async () => {
           try {
-            const response = await fetch('/api/routes/calculate', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                startId: startBuilding.id,
-                startLat: startBuilding.lat,
-                startLng: startBuilding.lng,
-                endId: endBuilding.id,
-                mode: travelMode || 'walking'
-              })
-            });
+            const routePolyline = await calculateRouteClientSide(
+              startBuilding as any,
+              endBuilding,
+              travelMode || 'walking'
+            );
 
-            if (!response.ok) {
+            if (!routePolyline) {
               console.error('Failed to calculate route');
               return;
             }
-
-            const data = await response.json();
-            const routePolyline = data.route as Array<{ lat: number; lng: number }>;
 
             const steps = [];
             let totalDist = 0;
@@ -156,29 +153,48 @@ export default function Navigation() {
     return R * c;
   };
 
+  const calculateRouteClientSide = async (
+    startBuilding: Building | typeof KIOSK_LOCATION,
+    endBuilding: Building,
+    travelMode: 'walking' | 'driving'
+  ): Promise<Array<{ lat: number; lng: number }> | null> => {
+    try {
+      const paths = travelMode === 'walking' 
+        ? await getWalkpaths()
+        : await getDrivepaths();
+
+      if (!paths || paths.length === 0) {
+        console.error('[CLIENT] No paths available for pathfinding');
+        return null;
+      }
+
+      const route = findShortestPath(
+        startBuilding as Building,
+        endBuilding,
+        paths
+      );
+
+      return route;
+    } catch (error) {
+      console.error('[CLIENT] Error calculating route:', error);
+      return null;
+    }
+  };
+
   const generateRoute = async () => {
     if (!selectedStart || !selectedEnd) return;
 
     try {
-      const response = await fetch('/api/routes/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          startId: selectedStart.id,
-          startLat: selectedStart.lat,
-          startLng: selectedStart.lng,
-          endId: selectedEnd.id,
-          mode
-        })
-      });
+      const routePolyline = await calculateRouteClientSide(
+        selectedStart,
+        selectedEnd,
+        mode
+      );
 
-      if (!response.ok) {
+      if (!routePolyline) {
         console.error('Failed to calculate route');
         return;
       }
-
-      const data = await response.json();
-      const routePolyline = data.route as Array<{ lat: number; lng: number }>;
 
       const steps = [];
       let totalDist = 0;
@@ -262,25 +278,16 @@ export default function Navigation() {
 
     // Generate the route
     try {
-      const response = await fetch('/api/routes/calculate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          startId: start.id,
-          startLat: start.lat,
-          startLng: start.lng,
-          endId: directionsDestination.id,
-          mode: travelMode
-        })
-      });
+      const routePolyline = await calculateRouteClientSide(
+        start,
+        directionsDestination,
+        travelMode
+      );
 
-      if (!response.ok) {
+      if (!routePolyline) {
         console.error('Failed to calculate route');
         return;
       }
-
-      const data = await response.json();
-      const routePolyline = data.route as Array<{ lat: number; lng: number }>;
 
       const steps = [];
       let totalDist = 0;

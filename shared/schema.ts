@@ -94,7 +94,11 @@ export const KIOSK_LOCATION = {
   name: 'Your Location (Kiosk)',
   lat: 14.403115555479292,
   lng: 120.86635977029803,
-  type: 'Kiosk'
+  type: 'Kiosk',
+  description: null,
+  departments: null,
+  image: null,
+  markerIcon: null
 } as const;
 
 // Buildings table
