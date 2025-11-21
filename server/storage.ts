@@ -1,6 +1,7 @@
+import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
-import * as schema from "@shared/schema";
+import { readFileSync } from "fs";
+import { join } from "path";
 import type {
   Building, InsertBuilding,
   Floor, InsertFloor,
@@ -12,6 +13,29 @@ import type {
   AdminUser, InsertAdminUser,
   Setting, InsertSetting
 } from "@shared/schema";
+
+let usingFallback = false;
+let fallbackData: any = null;
+
+function loadFallbackData() {
+  if (fallbackData) return fallbackData;
+  
+  try {
+    const dataPath = join(process.cwd(), 'data.json');
+    fallbackData = JSON.parse(readFileSync(dataPath, 'utf8'));
+    
+    if (!usingFallback) {
+      usingFallback = true;
+      console.warn('⚠️ FALLBACK MODE ACTIVATED: Using data.json because Firestore connection failed');
+      console.warn('⚠️ Please check your Firebase configuration and serviceAccountKey.json');
+    }
+    
+    return fallbackData;
+  } catch (error) {
+    console.error('❌ Failed to load fallback data from data.json:', error);
+    return { buildings: [], floors: [], rooms: [], staff: [], events: [], walkpaths: [], drivepaths: [], admins: [], settings: [] };
+  }
+}
 
 export interface IStorage {
   getBuildings(): Promise<Building[]>;
@@ -72,225 +96,534 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // Buildings
   async getBuildings(): Promise<Building[]> {
-    return await db.select().from(schema.buildings);
+    try {
+      const snapshot = await db.collection('buildings').get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Building));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.buildings || [];
+    }
   }
 
   async getBuilding(id: string): Promise<Building | undefined> {
-    const result = await db.select().from(schema.buildings).where(eq(schema.buildings.id, id));
-    return result[0];
+    try {
+      const doc = await db.collection('buildings').doc(id).get();
+      if (!doc.exists) return undefined;
+      return { id: doc.id, ...doc.data() } as Building;
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.buildings?.find((b: Building) => b.id === id);
+    }
   }
 
   async createBuilding(insertBuilding: InsertBuilding): Promise<Building> {
-    const result = await db.insert(schema.buildings).values(insertBuilding).returning();
-    return result[0];
+    try {
+      const id = randomUUID();
+      const building = { ...insertBuilding, id, markerIcon: insertBuilding.markerIcon || "building" } as Building;
+      await db.collection('buildings').doc(id).set(building);
+      return building;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot create building in fallback mode');
+    }
   }
 
   async updateBuilding(id: string, insertBuilding: InsertBuilding): Promise<Building | undefined> {
-    const result = await db.update(schema.buildings).set(insertBuilding).where(eq(schema.buildings.id, id)).returning();
-    return result[0];
+    try {
+      const building = { ...insertBuilding, id, markerIcon: insertBuilding.markerIcon || "building" } as Building;
+      await db.collection('buildings').doc(id).set(building);
+      return building;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot update building in fallback mode');
+    }
   }
 
   async deleteBuilding(id: string): Promise<boolean> {
-    await db.delete(schema.buildings).where(eq(schema.buildings.id, id));
-    return true;
+    try {
+      await db.collection('buildings').doc(id).delete();
+      return true;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot delete building in fallback mode');
+    }
   }
 
+  // Floors
   async getFloors(): Promise<Floor[]> {
-    return await db.select().from(schema.floors);
+    try {
+      const snapshot = await db.collection('floors').get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Floor));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.floors || [];
+    }
   }
 
   async getFloor(id: string): Promise<Floor | undefined> {
-    const result = await db.select().from(schema.floors).where(eq(schema.floors.id, id));
-    return result[0];
+    try {
+      const doc = await db.collection('floors').doc(id).get();
+      if (!doc.exists) return undefined;
+      return { id: doc.id, ...doc.data() } as Floor;
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.floors?.find((f: Floor) => f.id === id);
+    }
   }
 
   async getFloorsByBuilding(buildingId: string): Promise<Floor[]> {
-    return await db.select().from(schema.floors).where(eq(schema.floors.buildingId, buildingId));
+    try {
+      const snapshot = await db.collection('floors').where('buildingId', '==', buildingId).get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Floor));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.floors?.filter((f: Floor) => f.buildingId === buildingId) || [];
+    }
   }
 
   async createFloor(insertFloor: InsertFloor): Promise<Floor> {
-    const result = await db.insert(schema.floors).values(insertFloor).returning();
-    return result[0];
+    try {
+      const id = randomUUID();
+      const floor = { ...insertFloor, id } as Floor;
+      await db.collection('floors').doc(id).set(floor);
+      return floor;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot create floor in fallback mode');
+    }
   }
 
   async updateFloor(id: string, insertFloor: InsertFloor): Promise<Floor | undefined> {
-    const result = await db.update(schema.floors).set(insertFloor).where(eq(schema.floors.id, id)).returning();
-    return result[0];
+    try {
+      const floor = { ...insertFloor, id } as Floor;
+      await db.collection('floors').doc(id).set(floor);
+      return floor;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot update floor in fallback mode');
+    }
   }
 
   async deleteFloor(id: string): Promise<boolean> {
-    await db.delete(schema.floors).where(eq(schema.floors.id, id));
-    return true;
+    try {
+      await db.collection('floors').doc(id).delete();
+      return true;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot delete floor in fallback mode');
+    }
   }
 
+  // Rooms
   async getRooms(): Promise<Room[]> {
-    return await db.select().from(schema.rooms);
+    try {
+      const snapshot = await db.collection('rooms').get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.rooms || [];
+    }
   }
 
   async getRoom(id: string): Promise<Room | undefined> {
-    const result = await db.select().from(schema.rooms).where(eq(schema.rooms.id, id));
-    return result[0];
+    try {
+      const doc = await db.collection('rooms').doc(id).get();
+      if (!doc.exists) return undefined;
+      return { id: doc.id, ...doc.data() } as Room;
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.rooms?.find((r: Room) => r.id === id);
+    }
   }
 
   async getRoomsByFloor(floorId: string): Promise<Room[]> {
-    return await db.select().from(schema.rooms).where(eq(schema.rooms.floorId, floorId));
+    try {
+      const snapshot = await db.collection('rooms').where('floorId', '==', floorId).get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.rooms?.filter((r: Room) => r.floorId === floorId) || [];
+    }
   }
 
   async getRoomsByBuilding(buildingId: string): Promise<Room[]> {
-    return await db.select().from(schema.rooms).where(eq(schema.rooms.buildingId, buildingId));
+    try {
+      const snapshot = await db.collection('rooms').where('buildingId', '==', buildingId).get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Room));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.rooms?.filter((r: Room) => r.buildingId === buildingId) || [];
+    }
   }
 
   async createRoom(insertRoom: InsertRoom): Promise<Room> {
-    const result = await db.insert(schema.rooms).values(insertRoom).returning();
-    return result[0];
+    try {
+      const id = randomUUID();
+      const room = { ...insertRoom, id } as Room;
+      await db.collection('rooms').doc(id).set(room);
+      return room;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot create room in fallback mode');
+    }
   }
 
   async updateRoom(id: string, insertRoom: InsertRoom): Promise<Room | undefined> {
-    const result = await db.update(schema.rooms).set(insertRoom).where(eq(schema.rooms.id, id)).returning();
-    return result[0];
+    try {
+      const room = { ...insertRoom, id } as Room;
+      await db.collection('rooms').doc(id).set(room);
+      return room;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot update room in fallback mode');
+    }
   }
 
   async deleteRoom(id: string): Promise<boolean> {
-    await db.delete(schema.rooms).where(eq(schema.rooms.id, id));
-    return true;
+    try {
+      await db.collection('rooms').doc(id).delete();
+      return true;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot delete room in fallback mode');
+    }
   }
 
+  // Staff
   async getStaff(): Promise<Staff[]> {
-    return await db.select().from(schema.staff);
+    try {
+      const snapshot = await db.collection('staff').get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Staff));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.staff || [];
+    }
   }
 
   async getStaffMember(id: string): Promise<Staff | undefined> {
-    const result = await db.select().from(schema.staff).where(eq(schema.staff.id, id));
-    return result[0];
+    try {
+      const doc = await db.collection('staff').doc(id).get();
+      if (!doc.exists) return undefined;
+      return { id: doc.id, ...doc.data() } as Staff;
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.staff?.find((s: Staff) => s.id === id);
+    }
   }
 
   async getStaffByBuilding(buildingId: string): Promise<Staff[]> {
-    return await db.select().from(schema.staff).where(eq(schema.staff.buildingId, buildingId));
+    try {
+      const snapshot = await db.collection('staff').where('buildingId', '==', buildingId).get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Staff));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.staff?.filter((s: Staff) => s.buildingId === buildingId) || [];
+    }
   }
 
   async createStaff(insertStaff: InsertStaff): Promise<Staff> {
-    const result = await db.insert(schema.staff).values(insertStaff).returning();
-    return result[0];
+    try {
+      const id = randomUUID();
+      const staffMember = { ...insertStaff, id } as Staff;
+      await db.collection('staff').doc(id).set(staffMember);
+      return staffMember;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot create staff in fallback mode');
+    }
   }
 
   async updateStaff(id: string, insertStaff: InsertStaff): Promise<Staff | undefined> {
-    const result = await db.update(schema.staff).set(insertStaff).where(eq(schema.staff.id, id)).returning();
-    return result[0];
+    try {
+      const staffMember = { ...insertStaff, id } as Staff;
+      await db.collection('staff').doc(id).set(staffMember);
+      return staffMember;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot update staff in fallback mode');
+    }
   }
 
   async deleteStaff(id: string): Promise<boolean> {
-    await db.delete(schema.staff).where(eq(schema.staff.id, id));
-    return true;
+    try {
+      await db.collection('staff').doc(id).delete();
+      return true;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot delete staff in fallback mode');
+    }
   }
 
+  // Events
   async getEvents(): Promise<Event[]> {
-    return await db.select().from(schema.events);
+    try {
+      const snapshot = await db.collection('events').get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Event));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.events || [];
+    }
   }
 
   async getEvent(id: string): Promise<Event | undefined> {
-    const result = await db.select().from(schema.events).where(eq(schema.events.id, id));
-    return result[0];
+    try {
+      const doc = await db.collection('events').doc(id).get();
+      if (!doc.exists) return undefined;
+      return { id: doc.id, ...doc.data() } as Event;
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.events?.find((e: Event) => e.id === id);
+    }
   }
 
   async createEvent(insertEvent: InsertEvent): Promise<Event> {
-    const result = await db.insert(schema.events).values(insertEvent).returning();
-    return result[0];
+    try {
+      const id = randomUUID();
+      const event = { ...insertEvent, id, classification: insertEvent.classification || "Event" } as Event;
+      await db.collection('events').doc(id).set(event);
+      return event;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot create event in fallback mode');
+    }
   }
 
   async updateEvent(id: string, insertEvent: InsertEvent): Promise<Event | undefined> {
-    const result = await db.update(schema.events).set(insertEvent).where(eq(schema.events.id, id)).returning();
-    return result[0];
+    try {
+      const event = { ...insertEvent, id, classification: insertEvent.classification || "Event" } as Event;
+      await db.collection('events').doc(id).set(event);
+      return event;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot update event in fallback mode');
+    }
   }
 
   async deleteEvent(id: string): Promise<boolean> {
-    await db.delete(schema.events).where(eq(schema.events.id, id));
-    return true;
+    try {
+      await db.collection('events').doc(id).delete();
+      return true;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot delete event in fallback mode');
+    }
   }
 
+  // Walkpaths
   async getWalkpaths(): Promise<Walkpath[]> {
-    return await db.select().from(schema.walkpaths);
+    try {
+      const snapshot = await db.collection('walkpaths').get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Walkpath));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.walkpaths || [];
+    }
   }
 
   async getWalkpath(id: string): Promise<Walkpath | undefined> {
-    const result = await db.select().from(schema.walkpaths).where(eq(schema.walkpaths.id, id));
-    return result[0];
+    try {
+      const doc = await db.collection('walkpaths').doc(id).get();
+      if (!doc.exists) return undefined;
+      return { id: doc.id, ...doc.data() } as Walkpath;
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.walkpaths?.find((w: Walkpath) => w.id === id);
+    }
   }
 
   async createWalkpath(insertWalkpath: InsertWalkpath): Promise<Walkpath> {
-    const result = await db.insert(schema.walkpaths).values(insertWalkpath).returning();
-    return result[0];
+    try {
+      const id = randomUUID();
+      const walkpath = { ...insertWalkpath, id } as Walkpath;
+      await db.collection('walkpaths').doc(id).set(walkpath);
+      return walkpath;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot create walkpath in fallback mode');
+    }
   }
 
   async updateWalkpath(id: string, insertWalkpath: InsertWalkpath): Promise<Walkpath | undefined> {
-    const result = await db.update(schema.walkpaths).set(insertWalkpath).where(eq(schema.walkpaths.id, id)).returning();
-    return result[0];
+    try {
+      const walkpath = { ...insertWalkpath, id } as Walkpath;
+      await db.collection('walkpaths').doc(id).set(walkpath);
+      return walkpath;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot update walkpath in fallback mode');
+    }
   }
 
   async deleteWalkpath(id: string): Promise<boolean> {
-    await db.delete(schema.walkpaths).where(eq(schema.walkpaths.id, id));
-    return true;
+    try {
+      await db.collection('walkpaths').doc(id).delete();
+      return true;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot delete walkpath in fallback mode');
+    }
   }
 
+  // Drivepaths
   async getDrivepaths(): Promise<Drivepath[]> {
-    return await db.select().from(schema.drivepaths);
+    try {
+      const snapshot = await db.collection('drivepaths').get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Drivepath));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.drivepaths || [];
+    }
   }
 
   async getDrivepath(id: string): Promise<Drivepath | undefined> {
-    const result = await db.select().from(schema.drivepaths).where(eq(schema.drivepaths.id, id));
-    return result[0];
+    try {
+      const doc = await db.collection('drivepaths').doc(id).get();
+      if (!doc.exists) return undefined;
+      return { id: doc.id, ...doc.data() } as Drivepath;
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.drivepaths?.find((d: Drivepath) => d.id === id);
+    }
   }
 
   async createDrivepath(insertDrivepath: InsertDrivepath): Promise<Drivepath> {
-    const result = await db.insert(schema.drivepaths).values(insertDrivepath).returning();
-    return result[0];
+    try {
+      const id = randomUUID();
+      const drivepath = { ...insertDrivepath, id } as Drivepath;
+      await db.collection('drivepaths').doc(id).set(drivepath);
+      return drivepath;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot create drivepath in fallback mode');
+    }
   }
 
   async updateDrivepath(id: string, insertDrivepath: InsertDrivepath): Promise<Drivepath | undefined> {
-    const result = await db.update(schema.drivepaths).set(insertDrivepath).where(eq(schema.drivepaths.id, id)).returning();
-    return result[0];
+    try {
+      const drivepath = { ...insertDrivepath, id } as Drivepath;
+      await db.collection('drivepaths').doc(id).set(drivepath);
+      return drivepath;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot update drivepath in fallback mode');
+    }
   }
 
   async deleteDrivepath(id: string): Promise<boolean> {
-    await db.delete(schema.drivepaths).where(eq(schema.drivepaths.id, id));
-    return true;
+    try {
+      await db.collection('drivepaths').doc(id).delete();
+      return true;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot delete drivepath in fallback mode');
+    }
   }
 
+  // Admin
   async getAdminByUsername(username: string): Promise<AdminUser | undefined> {
-    const result = await db.select().from(schema.admins).where(eq(schema.admins.username, username));
-    return result[0];
+    try {
+      const snapshot = await db.collection('admins').where('username', '==', username).get();
+      if (snapshot.empty) return undefined;
+      const doc = snapshot.docs[0];
+      return { id: doc.id, ...doc.data() } as AdminUser;
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.admins?.find((a: AdminUser) => a.username === username);
+    }
   }
 
   async createAdmin(insertAdmin: InsertAdminUser): Promise<AdminUser> {
-    const result = await db.insert(schema.admins).values(insertAdmin).returning();
-    return result[0];
+    try {
+      const id = randomUUID();
+      const admin: AdminUser = { ...insertAdmin, id };
+      await db.collection('admins').doc(id).set(admin);
+      return admin;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot create admin in fallback mode');
+    }
   }
 
+  // Settings
   async getSettings(): Promise<Setting[]> {
-    return await db.select().from(schema.settings);
+    try {
+      const snapshot = await db.collection('settings').get();
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Setting));
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.settings || [];
+    }
   }
 
   async getSetting(key: string): Promise<Setting | undefined> {
-    const result = await db.select().from(schema.settings).where(eq(schema.settings.key, key));
-    return result[0];
+    try {
+      const snapshot = await db.collection('settings').where('key', '==', key).get();
+      if (snapshot.empty) return undefined;
+      const doc = snapshot.docs[0];
+      return { id: doc.id, ...doc.data() } as Setting;
+    } catch (error) {
+      console.error('Firestore error, using fallback:', error);
+      const data = loadFallbackData();
+      return data.settings?.find((s: Setting) => s.key === key);
+    }
   }
 
   async createSetting(insertSetting: InsertSetting): Promise<Setting> {
-    const result = await db.insert(schema.settings).values(insertSetting).returning();
-    return result[0];
+    try {
+      const id = randomUUID();
+      const setting: Setting = { ...insertSetting, id };
+      await db.collection('settings').doc(id).set(setting);
+      return setting;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot create setting in fallback mode');
+    }
   }
 
   async updateSetting(key: string, value: string): Promise<Setting | undefined> {
-    const existing = await this.getSetting(key);
-    if (!existing) {
-      return undefined;
+    try {
+      const existing = await this.getSetting(key);
+      if (!existing) {
+        return undefined;
+      }
+      const updated: Setting = { 
+        id: existing.id,
+        key: existing.key,
+        value,
+        description: existing.description || null
+      };
+      await db.collection('settings').doc(existing.id).set(updated);
+      return updated;
+    } catch (error) {
+      console.error('Firestore error:', error);
+      throw new Error('Cannot update setting in fallback mode');
     }
-    const result = await db.update(schema.settings).set({ value }).where(eq(schema.settings.key, key)).returning();
-    return result[0];
   }
 
   async exportToJSON(): Promise<void> {
-    console.log('Export to JSON skipped - PostgreSQL is the source of truth');
+    console.log('Export to JSON skipped - Firestore is the source of truth');
   }
 }
 
